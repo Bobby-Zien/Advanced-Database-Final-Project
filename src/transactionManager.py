@@ -1,6 +1,7 @@
 from dataManager import *
 from ExceptionHandler import *
 from collections import deque
+from iohandler import Parser
 
 # Transaction status
 class TRAN_STATUS(Enum):
@@ -23,8 +24,35 @@ class TransactionManager:
         self.timestamp = 0
 
         # Initialize the data managers
-        for i in range(10):
+        for i in range(1,11):
             self.sites[i] = DataManager(i)
+
+    def get_operation(self,args):
+        type = args.pop(0)
+        if type == "begin":
+            self.begin(args[0])
+        elif type == "beginRO":
+            self.beginRO(args[0])
+        elif type == "R":
+            # self.add_read(args[0], args[1])
+        elif type == "W":
+            # self.add_write(args[0], args[1], args[2])
+        elif type == "dump":
+            self.dump()
+        elif type == "end":
+            self.end(args[0])
+        elif type == "fail":
+            self.fail(int(args[0]))
+        elif type == "recover":
+            self.recover(int(args[0]))
+        else:
+            raise InvalidInputError("ERROR: Invalid Input: {}".format(command))
+
+        self.timestamp += 1
+        self.execute()
+        if self.deadlock_detect():
+            self.execute()
+
 
     def begin(self, transaction_id: int) -> None:
         """
