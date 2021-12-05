@@ -1,12 +1,16 @@
+import parser
+from transactionManager import *
 from iohandler import Parser
-import sys
-
 if __name__ == '__main__':
     if len(sys.argv) >= 2:
         filename = sys.argv[1]
         parser = Parser(filename)
-        # call transaction manager inside parser.parse_file() when traversing the operation lines
+        tm = TransactionManager()
         parser.parse_file()  
+        
+        while cmd is not None:
+            TransactionManager.get_operation(cmd) 
+            cmd = parser.get_operation()
     else:
         print('ERROR: PLEASE INPUT THE COMMAND FILE!')
 
