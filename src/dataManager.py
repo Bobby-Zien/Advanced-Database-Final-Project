@@ -1,10 +1,18 @@
 from collections import defaultdict
+from ExceptionHandler import *
 from enum import Enum
 
+# Lock status for a variable
 class LOCK(Enum):
     NONE = 'NONE'
     READ = 'READ'
     WRITE = 'WRITE'
+
+# Data manager's status
+class DM_STATUS(Enum):
+    WORKING = 'WORKING'
+    DOWN = 'DOWN'
+    POWEROFF = 'POWEROFF'
 
 class Variable:
     def __init__(self, id: str, val: int, lock: LOCK, copied: bool) -> None:
