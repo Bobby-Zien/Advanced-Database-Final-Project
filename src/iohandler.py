@@ -15,8 +15,7 @@ class Parser:
         except IOError:
             print("FATAL ERROR: Invalid input file {}".format(self.file_name))
 
-    def _parse_line(self, line: str) -> list:
-        line = line.split('#')[0].strip()
+
+    def _parse_line(self, line:str):
+        line = line.split('//')[0].strip()
         return re.findall(r"[\w]+", line)
-
-
