@@ -1,3 +1,16 @@
+# How to run
+cd src/
+python main.py ../test/test1.txt
+
+Replace test1.txt with other test cases
+
+
+# TODO: 
+1. Deadlock detection
+2. test case failing: test 9, 10, 14, 15
+3. Missing test cases: 3, 16-21
+
+
 # project-template
 
 This is a skeleton you can use to start your projects
