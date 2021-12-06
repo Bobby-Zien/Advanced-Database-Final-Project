@@ -1,5 +1,4 @@
 from collections import defaultdict, OrderedDict, deque
-from ExceptionHandler import *
 from enum import Enum
 
 # Lock status for a variable
@@ -155,7 +154,7 @@ class DataManager:
         """
         if var_id not in self.variables:
             return True
-        var = self.variables[var_id]
+        var : Variable = self.variables[var_id]
         if var.lock == LOCK.NONE:
             var.lock = LOCK.WRITE
             var.lock_by_trans_id = trans_id
@@ -180,7 +179,7 @@ class DataManager:
             return True
         return False
     
-    def read(self, variable_id: str, tid: str):
+    def read(self, variable_id: str, tid: str) -> tuple[bool, int]:
         """[summary]
         a transaction is asked to read a variable
         Returning None means the read is not succeed
@@ -214,7 +213,7 @@ class DataManager:
             var.lock_waiting_queue.append((LOCK.READ, tid))
         return False, None
 
-    def commit(self, transaction_id: str, ts:int) -> None:
+    def commit(self, transaction_id: str, ts: int) -> None:
         """[summary]
         commit the uncommited variable written by this transaction 
 
@@ -246,14 +245,16 @@ class DataManager:
             transaction_id (str): 
         """
         for var in self.variables.values():
-            var.release_current_lock(transaction_id)
+            var : Variable
+            var.release_lock(transaction_id)
             for l in list(var.lock_waiting_queue):
                 if l[1] == transaction_id:
                     var.lock_waiting_queue.remove(l)
-            var.lock_waiting_queue_pop()
+            var.update_lock_waiting_queue()
 
     def fail(self) -> None:
         for variable in self.variables.values():
+            variable : Variable
             variable.lock = LOCK.NONE
             variable.status = VAR_STATUS.UNAVAILABLE
             variable.lock_waiting_queue = deque()
@@ -268,6 +269,7 @@ class DataManager:
         else:
             self.on_flag = True
             for variable in self.variables.values():
+                variable : Variable
                 if variable.even:
                     self.status = VAR_STATUS.RECOVERING
                 else:
@@ -275,20 +277,20 @@ class DataManager:
             print("Successfully recovered site %s ." % (self.id))
             return True
 
-    def snapshot(self, timestamp: int, var: str):
+    def snapshot(self, timestamp: int, var_id: str) -> tuple[bool, int]:
         """[summary]
         Read function for read-only transactions 
 
         Args:
             timestamp (int): start time of the RO transaction
-            var (str): var_id
+            var_id (str): var_id
 
         Returns:
             bool: successful or not
             int or None: int for the value, None if fail
         """
-        if var in self.variables:
-            current_variable = self.variables[var]
+        if var_id in self.variables:
+            current_variable : Variable = self.variables[var_id]
             value = 0
             for ts, v in current_variable.commited_val.items():
                 if ts <= timestamp:
@@ -298,7 +300,7 @@ class DataManager:
             return True, value
         return False, None
 
-    def dump(self):
+    def dump(self) -> None:
         """[summary]
         print the info
         """
