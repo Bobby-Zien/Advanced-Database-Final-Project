@@ -1,12 +1,15 @@
-// Test 1.
-// T2 should abort, T1 should not, because of kill youngest
+// Test 2
+// No aborts happens, since read-only transactions use
+// multiversion read protocol.
+
 begin(T1)
-begin(T2)
+beginRO(T2)
 W(T1,x1,101) 
-W(T2,x2,202)
+R(T2,x2)
 W(T1,x2,102) 
-W(T2,x1,201)
-end(T1)
+R(T2,x1)
+end(T1) 
+end(T2)
 dump()
 
 === output of dump
