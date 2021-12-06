@@ -41,7 +41,7 @@ class TransactionManager:
         for i in range(10):
             self.sites[i] = DataManager(i+1)
 
-    def get_operation(self, args: list) -> None:
+    def operate(self, args: list) -> None:
         """
         Called by the main function to run a operation
         """
@@ -101,12 +101,14 @@ class TransactionManager:
         Begin a transaction
         """
         self.transactions[transaction_id] = Transaction(transaction_id, self.timestamp, readOnly=False)
+        if self.debug: print("Transaction: {} begins".format(transaction_id))
     
     def beginRO(self, transaction_id: str) -> None:
         """
         Begin a read-only transaction
         """
         self.transactions[transaction_id] = Transaction(transaction_id, self.timestamp, readOnly=True)
+        if self.debug: print("Read-Only Transaction: {} begins".format(transaction_id))
 
     def read(self, transaction_id: str, variable_id: str) -> bool:
         """
@@ -117,20 +119,20 @@ class TransactionManager:
             site : DataManager
             if site.on_flag == False:
                 continue
-
+            
             # read only transaction, read by snapshot
             ts : Transaction = self.transactions[transaction_id]
             if ts.readOnly == True:
                 ret, val = site.snapshot(ts.timestamp, variable_id)
                 if ret == True:
-                    if self.debug: print("Read-only transaction: {},  read from site: {} ---- {}: {}".format(transaction_id, site.id, variable_id, val))
+                    if self.debug: print("Read-only transaction: {},  read from site {} -- {}: {}".format(transaction_id, site.id, variable_id, val))
                     return True
 
             # Normal transactions
             else:
-                ret, val = site.read(transaction_id, variable_id)
+                ret, val = site.read(variable_id, transaction_id)
                 if ret == True:
-                    if self.debug: print("Transaction: {}, read from site: {} ---- {}: {}".format(transaction_id, site.id, variable_id, val))
+                    if self.debug: print("Transaction: {}, read from site {} -- {}: {}".format(transaction_id, site.id, variable_id, val))
                     return True
         return False
 
@@ -183,15 +185,16 @@ class TransactionManager:
 
     def fail(self, site_id: int) -> None:
         if site_id not in set(range(10)):
-            if self.debug: print("Error: Invalid site id: {} to fail".format(site_id))
+            if self.debug: print("Error: Invalid site id: {} to fail".format(site_id + 1)) # site_id is index
             return
         
         site : DataManager = self.sites[site_id]
         site.fail()
+        if self.debug: print("Site: {} failed".format(site_id + 1)) # site_id is index
     
     def recover(self, site_id: int) -> None:
         if site_id not in set(range(10)):
-            if self.debug: print("Error: Invalid site id: {} to recover".format(site_id))
+            if self.debug: print("Error: Invalid site id: {} to recover".format(site_id + 1)) # site_id is index
             return
 
         site : DataManager = self.sites[site_id]
@@ -199,7 +202,8 @@ class TransactionManager:
         if site.on_flag == True:
             return
 
-        site.recover()
+        ret = site.recover()
+        if self.debug and ret: print("Successfully recovered site %s." % (site_id + 1)) # site_id is index
 
     def __abort(self, transaction_id: str) -> None:
         """
@@ -224,7 +228,7 @@ class TransactionManager:
             site : DataManager
             site.commit(transaction_id, self.timestamp)
         self.transactions.pop(transaction_id)
-        self.debug: print("Commit transaction :{}", transaction_id)
+        self.debug: print("Commited transaction: {}", transaction_id)
 
     ########### TODO #################
     def __deadlock_detection(self) -> bool:

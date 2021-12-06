@@ -18,7 +18,6 @@ class VAR_STATUS(Enum):
     UNAVAILABLE = 'UNAVAILABLE'
     RECOVERING = 'RECOVERING'
 
-
 class Variable:
     def __init__(self, id: str, val: int, lock: LOCK, even: bool) -> None:
         """
@@ -271,11 +270,11 @@ class DataManager:
             for variable in self.variables.values():
                 variable : Variable
                 if variable.even:
-                    self.status = VAR_STATUS.RECOVERING
+                    variable.status = VAR_STATUS.RECOVERING
                 else:
-                    self.status = VAR_STATUS.READY
-            print("Successfully recovered site %s ." % (self.id))
+                    variable.status = VAR_STATUS.READY
             return True
+        return False
 
     def snapshot(self, timestamp: int, var_id: str) -> tuple[bool, int]:
         """[summary]

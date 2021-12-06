@@ -10,12 +10,12 @@ if __name__ == '__main__':
         tm.debug = True # set to true if you'd like to see more debug logs
         parser.parse_file()
         
-        print("\n----- RUNNING TRANSACTION MANAGER -----")
+        print("\n----- RUNNING TRANSACTION MANAGER -----\n")
         cmd = parser.get_operation()
         while cmd is not None:
-            tm.get_operation(cmd) 
+            tm.operate(cmd)
             cmd = parser.get_operation()
-        print("\n-------- FINISHED ---------\n")
+        print("\n-------------- FINISHED ---------------\n")
     else:
         print('ERROR: PLEASE INPUT THE COMMAND FILE!')
 
