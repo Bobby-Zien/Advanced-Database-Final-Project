@@ -1,3 +1,4 @@
+from _typeshed import ReadableBuffer
 from collections import defaultdict, OrderedDict, deque
 from ExceptionHandler import *
 from enum import Enum
@@ -29,6 +30,8 @@ class Variable:
         copied (bool): copied to multiple sites or not
         commited_val(dict): key is timestamp, value is the value commited at that time
         current_val(int): local modification that haven't been submitted
+
+        lock_waiting_queue:each item is a tuple of (lock_type, transaction_id)
         """
         self.id = id
         self.value = val
@@ -41,14 +44,23 @@ class Variable:
         self.lock = lock
         self.lock_by_trans_id = None
         self.read_lock_list = set()
-        self.lock_waiting_queue = deque()  # each item is a tuple of (lock_type, transaction_id)
+        self.lock_waiting_queue = deque()  
 
-    def promote_lock(self, tid):
-        self.read_lock_list = set()
-        self.lock = LOCK.WRITE
-        self.lock_by_trans_id = tid
+    def promote_lock(self, tid) -> bool:
+        """[summary]
+        promote the current read lock to write lock
+        Args:
+            tid ([type]): transaction id
 
-    def has_write_waiting(self):
+        Returns:
+            bool:  successful or not
+        """
+        if tid == self.lock_by_trans_id and len(self.read_lock_list) == 1:
+            self.read_lock_list = set()
+            self.lock = LOCK.WRITE
+        
+
+    def has_write_waiting(self) -> bool:
         for l in self.lock_waiting_queue:
             if l[0] == LOCK.WRITE:
                 return True
@@ -59,26 +71,43 @@ class Variable:
         if len(self.read_lock_list) > 1 or tid not in var.read_lock_list or self.has_write_waiting():
             return True
 
+    def release_lock(self, tid):
+        if self.lock == LOCK.WRITE and tid == self.lock_by_trans_id:
+            self.current_lock = None    
+        elif self.lock == LOCK.READ and tid in self.read_lock_list:
+            self.read_lock_list.remove(tid)
+            if len(self.read_lock_list) <1:
+                self.lock = LOCK.NONE  
+
     
-    ### TODO ###
     def lock_waiting_queue_pop(self):
-        # if self.lock_waiting_queue:
-        #     if self.lock == LOCK.NONE:
-        #         self.lock, self.lock_by_trans_id = self.lock_waiting_queue.popleft()
-        #     elif self.lock == LOCK.READ:
-        #         for lock in list(self.lock_waiting_queue):
-        #             # promote current transaction's pending write lock
-        #             if lock.lock_type == "W" and len(self.current_lock.share_list) == 1 and lk.trans_id in self.current_lock.share_list:
-        #                 self.promote_current_lock(lk)
-        #                 self.lock_queue.remove(lk)
-        #                 break
-        #             self.share_lock(lk.trans_id)
-        #             self.lock_queue.remove(lk)
-        return 
+        if self.lock_waiting_queue:
+            if self.lock == LOCK.NONE:
+                self.lock, self.lock_by_trans_id = self.lock_waiting_queue.popleft()
+            elif self.lock == LOCK.READ:
+                for lock in list(self.lock_waiting_queue):
+                    if lock[0] == LOCK.WRITE and len(self.read_lock_list) == 1:
+                        self.promote_current_lock(tid)
+                        self.lock_queue.remove(lk)
+                        break
+                    self.read_lock_list.add(lock[1])
+                    self.lock_queue.remove(lock) 
+    
+    def remain_lock(self, tid):
+        for _,l in self.lock_waiting_queue:
+            if l == tid:
+                return True
+        return False
+
 
 
 class DataManager:
     def __init__(self, id: int) -> None:
+        """[summary]
+        variables (dict): 
+        uncommited_variables (dict):
+        """
+
         self.id = id
         self.variables = defaultdict(Variable)
         self.uncommited_variables = defaultdict(set)
@@ -112,6 +141,16 @@ class DataManager:
         return False
 
     def if_can_write(self, trans_id, var_id) -> bool:
+        """
+        check if a transaction can wirte the variable on this site
+
+        Args:
+            trans_id ([type]): transaction id
+            var_id ([type]): variable id
+
+        Returns:
+            bool: True means can, False means no
+        """
         if var_id not in self.variables:
             return True
         var = self.variables[var_id]
@@ -135,11 +174,21 @@ class DataManager:
     def local_write(self, variable_id: str, val: int, transaction_id) -> bool:
         if variable_id in self.variables:
             self.variables[variable_id].current_val = val
-            self.uncommited_variables[transaction_id].add(self.variables[variable_id])
+            self.uncommited_variables[transaction_id].add(self.variables[variable_id]) 
             return True
         return False
     
     def read(self, variable_id: str, tid) -> int:
+        """[summary]
+        a transaction is asked to read a variable
+        Returning None means the read is not succeed
+        Args:
+            variable_id (str): 
+            tid : transaction id 
+
+        Returns:
+            int: the value of the variable
+        """
         if variable_id in self.variables:
             var = self.variables[var_id]
             if var.status != VAR_STATUS.READY:
@@ -164,22 +213,41 @@ class DataManager:
         return None
 
     
-    def commit(self, transaction_id, ts) -> bool:
+    def commit(self, transaction_id, ts:int) -> None:
+        """[summary]
+        commit the uncommited variable written by this transaction 
+
+        Args:
+            transaction_id ([type]): transaction_id
+            ts (int): timestamp of the transaciton ending(commiting)
+        """
         if len(self.uncommited_variables[transaction_id]) < 1:
             return 
         for var in self.uncommited_variables[transaction_id]:
             var.commited_val[ts] = var.current_val
             var.status = VAR_STATUS.READY
-            #######TODO @zien update the queue? ############
-            # var.lock_waiting_queue_pop()
+            var.lock_waiting_queue_pop()
         del self.uncommited_variables[transaction_id]
-        
 
+        for var in self.variables.values():
+            var.release_current_lock(transaction_id)
+            if var.remain_lock():
+                print("COMMIT ERROR: transaction {} has remaining locks".format(trans_id))
+            var.lock_waiting_queue_pop()
 
-
-    #######TODO @zien ############
-    def abort(self, transaction_id: int) -> bool:
-        pass
+    def abort(self, transaction_id: int)-> None:
+        """[summary]
+        delete all the waiting locks from this transaction in the lock waiting queue and release the lock
+        and update the variable with a new lock
+        Args:
+            transaction_id (int): 
+        """
+        for var in self.variables.values():
+            var.release_current_lock(transaction_id)
+            for l in list(var.lock_waiting_queue):
+                if l[1] == transaction_id:
+                    var.lock_waiting_queue.remove(l)
+            var.lock_waiting_queue_pop()
 
     def fail(self) -> None:
         for variable in self.variables.values():
@@ -206,6 +274,17 @@ class DataManager:
 
 
     def snapshot(self, timestamp: int, var: str):
+        """[summary]
+        Read function for read-only transactions 
+
+        Args:
+            timestamp (int): start time of the RO transaction
+            var (str): var_id
+
+        Returns:
+            bool: successful or not
+            int or None: int for the value, None if fail
+        """
         if var in self.variables:
             current_variable = self.variables[var]
             value = 0
@@ -218,6 +297,9 @@ class DataManager:
         return False, None
 
     def dump():
+        """[summary]
+        print the info
+        """
         return_str = "Site {} - ".format(self.id)
         for var in self.variables.values():
             res += " {}: {} ,".format(var.id, var.commited_val[next(reversed(var.commited_val))])
