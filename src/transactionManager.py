@@ -45,7 +45,7 @@ class TransactionManager:
         """
         Called by the main function to run a operation
         """
-        if len(args) == 0: # check with an empty line
+        if len(args) == 0: # check an empty line
             return
         type = args.pop(0) # get the operation
         if type == "begin":
@@ -72,12 +72,12 @@ class TransactionManager:
             
         self.timestamp += 1
 
-        #### TODO #### revise it
+        ##### TODO #### revise it
         self.__execute()
         if self.__deadlock_detection():
             self.execute()
 
-    ### TODO  ## - revise it
+    #### TODO  ## - revise it
     def __execute(self):
         """
         Go through the operation queue, execute those could be run
@@ -191,6 +191,8 @@ class TransactionManager:
         site : DataManager = self.sites[site_id]
         site.fail()
         if self.debug: print("Site: {} failed".format(site_id + 1)) # site_id is index
+
+        ######## TODO #########
     
     def recover(self, site_id: int) -> None:
         if site_id not in set(range(10)):
@@ -217,7 +219,7 @@ class TransactionManager:
         ts : Transaction = self.transactions[transaction_id]
         ts.status = TRAN_STATUS.ABORTED
         self.transactions.pop(transaction_id)
-        if self.debug: print("Aborted transaction :{}", transaction_id)
+        if self.debug: print("Aborted transaction :{}".format(transaction_id))
 
     def __commit(self, transaction_id: str) -> None:
         """
@@ -228,7 +230,7 @@ class TransactionManager:
             site : DataManager
             site.commit(transaction_id, self.timestamp)
         self.transactions.pop(transaction_id)
-        self.debug: print("Commited transaction: {}", transaction_id)
+        if self.debug: print("Commited transaction: {}".format(transaction_id))
 
     ########### TODO #################
     def __deadlock_detection(self) -> bool:

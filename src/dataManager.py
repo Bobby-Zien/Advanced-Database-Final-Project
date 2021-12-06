@@ -229,12 +229,14 @@ class DataManager:
             var.update_lock_waiting_queue()
         del self.uncommited_variables[transaction_id]
 
+        error = False
         for var in self.variables.values():
             var : Variable
             var.release_lock(transaction_id)
             if var.remain_lock(transaction_id):
-                print("COMMIT ERROR: transaction {} has remaining locks".format(transaction_id))
+                error = True
             var.update_lock_waiting_queue()
+        if error: print("COMMIT ERROR: transaction {} has remaining locks".format(transaction_id))
 
     def abort(self, transaction_id: str)-> None:
         """[summary]
