@@ -1,5 +1,6 @@
 import re
 from collections import deque
+
 class Parser:
     def __init__(self, file_name=None) -> None:
         self.FINISH_FLAG = False
@@ -16,11 +17,10 @@ class Parser:
         except IOError:
             print("FATAL ERROR: Invalid input file {}".format(self.file_name))
 
-    ##### TODO ### revise it
     def __parse_line(self, line:str):
         line = line.split('//')[0].strip()
         return re.findall(r"[\w]+", line)
-        
+
     def get_operation(self):
         if len(self.opertaions) > 0:
             return self.opertaions.popleft()

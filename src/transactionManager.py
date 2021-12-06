@@ -72,13 +72,13 @@ class TransactionManager:
             
         self.timestamp += 1
 
-        #### TODO ####
-        self.execute()
-        if self.deadlock_detection():
+        #### TODO #### revise it
+        self.__execute()
+        if self.__deadlock_detection():
             self.execute()
 
     ### TODO  ## - revise it
-    def execute(self):
+    def __execute(self):
         """
         Go through the operation queue, execute those could be run
         If a transaction does not exists, remove it from the operation queue
@@ -162,6 +162,7 @@ class TransactionManager:
         """
         Dump all data managers
         """
+        print()
         for site in self.sites:
             site : DataManager
             site.dump()
@@ -176,9 +177,9 @@ class TransactionManager:
             return
         ts : Transaction = self.transactions[transaction_id]
         if ts.status == TRAN_STATUS.ABORTED:
-            self.abort(transaction_id)
+            self.__abort(transaction_id)
         elif ts.status == TRAN_STATUS.COMMITTED:
-            self.commit(transaction_id)
+            self.__commit(transaction_id)
 
     def fail(self, site_id: int) -> None:
         if site_id not in set(range(10)):
@@ -200,10 +201,9 @@ class TransactionManager:
 
         site.recover()
 
-    '''
-    Maybe don't need abort and commit
-    def abort(self, transaction_id: str) -> None:
+    def __abort(self, transaction_id: str) -> None:
         """
+        Called by self.end()
         Abort the transaction to all the data managers
         """
         for site in self.sites:
@@ -215,8 +215,9 @@ class TransactionManager:
         self.transactions.pop(transaction_id)
         if self.debug: print("Aborted transaction :{}", transaction_id)
 
-    def commit(self, transaction_id: str) -> None:
+    def __commit(self, transaction_id: str) -> None:
         """
+        Called by self.end()
         Commits the transaction to all the data managers
         """
         for site in self.sites:
@@ -224,9 +225,9 @@ class TransactionManager:
             site.commit(transaction_id, self.timestamp)
         self.transactions.pop(transaction_id)
         self.debug: print("Commit transaction :{}", transaction_id)
-    '''
+
     ########### TODO #################
-    def deadlock_detection(self) -> bool:
+    def __deadlock_detection(self) -> bool:
         graph = []
         visited = set()
 

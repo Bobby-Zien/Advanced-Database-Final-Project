@@ -7,13 +7,15 @@ if __name__ == '__main__':
         filename = sys.argv[1]
         parser = Parser(filename)
         tm = TransactionManager()
+        tm.debug = True # set to true if you'd like to see more debug logs
         parser.parse_file()
         
+        print("\n----- RUNNING TRANSACTION MANAGER -----")
         cmd = parser.get_operation()
         while cmd is not None:
             tm.get_operation(cmd) 
-            print(cmd)
             cmd = parser.get_operation()
+        print("\n-------- FINISHED ---------\n")
     else:
         print('ERROR: PLEASE INPUT THE COMMAND FILE!')
 

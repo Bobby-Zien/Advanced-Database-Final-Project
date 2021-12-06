@@ -304,10 +304,11 @@ class DataManager:
         """[summary]
         print the info
         """
-        return_str = "Site {} - ".format(self.id)
+        # Generating outputs
+        return_str = "Site {:2} - ".format(self.id)
         for var in self.variables.values():
             var : Variable
-            return_str += " {}: {} ,".format(var.id, var.commited_val[next(reversed(var.commited_val))])
+            return_str += " {:2}: {:<5}".format(var.id, var.commited_val[next(reversed(var.commited_val))])
         print(return_str[:-1])  
 
     ######## TODO #############
