@@ -6,7 +6,7 @@ Replace test1.txt with other test cases
 
 
 # TODO: 
-1. test case failing: test 11, 12, 13, 14, 15, 18, 19, 21
+1. test case failing: test 15, 17, 18, 19, 21
 2. reprozip
 
 
