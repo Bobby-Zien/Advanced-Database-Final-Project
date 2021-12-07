@@ -6,9 +6,8 @@ Replace test1.txt with other test cases
 
 
 # TODO: 
-1. Deadlock detection
-2. test case failing: test 9, 10, 14, 15
-3. Missing test cases: 3, 16-21
+1. test case failing: test 11, 12, 13, 14, 15, 18, 19, 21
+2. reprozip
 
 
 # project-template
