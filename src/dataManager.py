@@ -181,7 +181,7 @@ class DataManager:
             return True
         return False
     
-    def read(self, variable_id: str, tid: str) -> tuple[bool, int]:
+    def read(self, variable_id: str, tid: str):
         """[summary]
         a transaction is asked to read a variable
         Returning None means the read is not succeed
@@ -281,7 +281,7 @@ class DataManager:
             return True
         return False
 
-    def snapshot(self, timestamp: int, var_id: str) -> tuple[bool, int]:
+    def snapshot(self, timestamp: int, var_id: str):
         """[summary]
         Read function for read-only transactions 
 
