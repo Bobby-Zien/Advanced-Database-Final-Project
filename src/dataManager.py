@@ -74,8 +74,11 @@ class Variable:
         """
         tid: transaction ID
         """
+        if self.lock == LOCK.NONE:
+            return
+
         if self.lock == LOCK.WRITE and tid == self.lock_by_trans_id:
-            self.current_lock = None    
+            self.lock = LOCK.NONE    
         elif self.lock == LOCK.READ and tid in self.read_lock_list:
             self.read_lock_list.remove(tid)
             if len(self.read_lock_list) <1:
@@ -105,12 +108,12 @@ class DataManager:
     def __init__(self, id: int) -> None:
         """[summary]
         variables (dict): 
-        uncommited_variables (dict) (transaction_id, set(Variable)) :
+        visiting_variables (dict) (transaction_id, set(Variable)) :
         """
 
         self.id = id
         self.variables = defaultdict(Variable)
-        self.uncommited_variables = defaultdict(set)
+        self.visiting_variables = defaultdict(set)
         self.on_flag = True
 
         # Initialize variable table
@@ -174,7 +177,7 @@ class DataManager:
         if variable_id in self.variables:
             self.variables[variable_id].current_val = val
             v : Variable = self.variables[variable_id]
-            self.uncommited_variables[transaction_id].add(v) 
+            self.visiting_variables[transaction_id].add(v) 
             return True
         return False
     
@@ -191,6 +194,7 @@ class DataManager:
         """
         if variable_id in self.variables:
             var : Variable = self.variables[variable_id]
+            self.visiting_variables[tid].add(var)
             if var.status != VAR_STATUS.READY:
                 return False, None
             if var.lock == LOCK.NONE:
@@ -220,14 +224,14 @@ class DataManager:
             transaction_id ([str]): transaction_id
             ts (int): timestamp of the transaciton ending(commiting)
         """
-        if len(self.uncommited_variables[transaction_id]) < 1:
+        if len(self.visiting_variables[transaction_id]) < 1:
             return
-        for var in self.uncommited_variables[transaction_id]:
+        for var in self.visiting_variables[transaction_id]:
             var : Variable
             var.commited_val[ts] = var.current_val
             var.status = VAR_STATUS.READY
             var.update_lock_waiting_queue()
-        del self.uncommited_variables[transaction_id]
+        del self.visiting_variables[transaction_id]
 
         error = False
         for var in self.variables.values():
@@ -260,7 +264,6 @@ class DataManager:
             variable.status = VAR_STATUS.UNAVAILABLE
             variable.lock_waiting_queue = deque()
             variable.read_lock_list = set()
-        self.uncommited_variables = defaultdict(set)
         self.on_flag = False
 
     def recover(self) -> bool:
@@ -311,7 +314,3 @@ class DataManager:
             var : Variable
             return_str += " {:2}: {:<5}".format(var.id, var.commited_val[next(reversed(var.commited_val))])
         print(return_str[:-1])  
-
-    ######## TODO #############
-    def generate_var_graph(self):
-        pass

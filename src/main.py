@@ -7,7 +7,7 @@ if __name__ == '__main__':
         filename = sys.argv[1]
         parser = Parser(filename)
         tm = TransactionManager()
-        tm.debug = True # set to true if you'd like to see more debug logs
+        tm.debug = True             # set to true if you'd like to see more debug logs
         parser.parse_file()
         
         print("\n----- RUNNING TRANSACTION MANAGER -----\n")
