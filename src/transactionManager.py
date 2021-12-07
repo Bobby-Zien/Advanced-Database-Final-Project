@@ -8,6 +8,17 @@ class TRAN_STATUS(Enum):
     ABORTED = 'ABORTED'
     COMMITTED = 'COMMITTED'
 
+# Command types
+class COMMAND_TYPE(Enum):
+    BEGIN = 'begin'
+    BEGINRO = 'beginRO'
+    READ = 'R'
+    WRITE = 'W'
+    END = 'end'
+    FAIL = 'fail'
+    RECOVER = 'recover'
+    DUMP = 'dump'
+
 class Transaction:
     def __init__(self, id: str, timestamp: int, readOnly: bool) -> None:
         self.id = id
@@ -15,8 +26,8 @@ class Transaction:
         self.timestamp = timestamp
         self.readOnly = readOnly
 
-class Operation:
-    def __init__(self, type: str, transaction_id: str, variable_id: str, val: int=0):
+class Command:
+    def __init__(self, type: COMMAND_TYPE, transaction_id: str, variable_id: str, val: int=0):
         self.type = type
         self.transaction_id = transaction_id
         self.variable_id = variable_id
@@ -27,13 +38,13 @@ class TransactionManager:
         """"
         sites (list): List of data manager
         transactions: (defaultdict(transaction_id:str, Transaction))
-        transaction_queue (deque): queue to store Read and Write transactions
+        command_queue (deque): queue to store Read and Write transactions
         timestamp (int): current time
+        debug (bool): flag to print debugging logs
         """
         self.sites = [None] * 10
         self.transactions = defaultdict(Transaction)
-        self.operation_queue = deque()
-        self.visited_transactions = set()
+        self.command_queue = deque()
         self.timestamp = 0
         self.debug = False
 
@@ -41,33 +52,52 @@ class TransactionManager:
         for i in range(10):
             self.sites[i] = DataManager(i+1)
 
+    def __udpate_command_queue(self) -> None:
+        """
+        Iterate the command queue, execute those commands that can run
+        """
+        for cmd in list(self.command_queue):
+            cmd : Command
+            if cmd.transaction_id not in self.transactions:
+                self.command_queue.remove(cmd)
+                return
+
+            flag = False
+            if cmd.type == COMMAND_TYPE.READ:
+                flag = self.read(cmd.transaction_id, cmd.variable_id)
+            elif cmd.type == COMMAND_TYPE.WRITE:
+                flag = self.write(cmd.transaction_id, cmd.variable_id, cmd.val)
+            if flag:
+                # remove executed commands
+                self.command_queue.remove(cmd)
+        return
+
     def operate(self, args: list) -> None:
         """
-        Called by the main function to run a operation
+        Called by the main function to run a command
         """
         if len(args) == 0: # check an empty line
             return
 
-        type = args.pop(0) # get the operation
-        if type == "begin":
+        cmd = args.pop(0) # get the command
+
+        if cmd == COMMAND_TYPE.BEGIN.value:
             self.begin(args[0]) # transaction_id
-        elif type == "beginRO":
+        elif cmd == COMMAND_TYPE.BEGINRO.value:
             self.beginRO(args[0]) # transaction_id
-        elif type == "R":
-            # add the read operation to the operation queue
-            self.operation_queue.append(Operation('R', args[0], args[1])) # (R, transaction_id, variable_id)
-            #self.read(args[0], args[1])
-        elif type == "W":
-            # add the write operation to the operation queue
-            self.operation_queue.append(Operation('W', args[0], args[1], args[2])) # (W, transaction_id, variable_id, value)
-            #self.write(args[0], args[1], args[2])
-        elif type == "end":
+        elif cmd == COMMAND_TYPE.READ.value:
+            # add the read command to the command queue
+            self.command_queue.append(Command(COMMAND_TYPE.READ, args[0], args[1])) # (R, transaction_id, variable_id)
+        elif cmd == COMMAND_TYPE.WRITE.value:
+            # add the write command to the command queue
+            self.command_queue.append(Command(COMMAND_TYPE.WRITE, args[0], args[1], args[2])) # (W, transaction_id, variable_id, value)
+        elif cmd == COMMAND_TYPE.END.value:
             self.end(args[0])
-        elif type == "fail":
+        elif cmd == COMMAND_TYPE.FAIL.value:
             self.fail(int(args[0])-1) # Because we store indexes in self.sites
-        elif type == "recover":
+        elif cmd == COMMAND_TYPE.RECOVER.value:
             self.recover(int(args[0])-1)
-        elif type == "dump":
+        elif cmd == COMMAND_TYPE.DUMP.value:
             self.dump()
         else:
             # Simply ignore invalid inputs
@@ -75,44 +105,23 @@ class TransactionManager:
             
         self.timestamp += 1
         
-
-        ##### TODO #### revise it
-        self.__execute()
-        if self.__deadlock_detection():
-            self.__execute()
-
-    #### TODO  ## - revise it
-    def __execute(self):
-        """
-        Go through the operation queue, execute those could be run
-        If a transaction does not exists, remove it from the operation queue
-        """
-        for ope in list(self.operation_queue):
-            ope : Operation
-            if not self.transactions.get(ope.transaction_id):
-                self.operation_queue.remove(ope)
-            else:
-                res = False
-                if ope.type == 'R':
-                    res = self.read(ope.transaction_id, ope.variable_id)
-                elif ope.type == 'W':
-                    res = self.write(ope.transaction_id, ope.variable_id, ope.val)
-                if res:
-                    self.operation_queue.remove(ope)
+        self.__udpate_command_queue()
+        while self.__deadlock_detection():
+            self.__udpate_command_queue()
 
     def begin(self, transaction_id: str) -> None:
         """
         Begin a transaction
         """
         self.transactions[transaction_id] = Transaction(transaction_id, self.timestamp, readOnly=False)
-        if self.debug: print("Transaction: {} begins".format(transaction_id))
+        if self.debug: print("{:7} --- Transaction: {} begins".format("Begin", transaction_id))
     
     def beginRO(self, transaction_id: str) -> None:
         """
         Begin a read-only transaction
         """
         self.transactions[transaction_id] = Transaction(transaction_id, self.timestamp, readOnly=True)
-        if self.debug: print("Read-Only Transaction: {} begins".format(transaction_id))
+        if self.debug: print("{:7} --- Read-Only Transaction: {} begins".format("BeginRO", transaction_id))
 
     def read(self, transaction_id: str, variable_id: str) -> bool:
         """
@@ -129,14 +138,14 @@ class TransactionManager:
             if ts.readOnly == True:
                 ret, val = site.snapshot(ts.timestamp, variable_id)
                 if ret == True:
-                    if self.debug: print("Read-only transaction: {},  read from site {} -- {}: {}".format(transaction_id, site.id, variable_id, val))
+                    if self.debug: print("{:7} --- Read-only transaction: {},  read from site {} -- {}: {}".format("Read", transaction_id, site.id, variable_id, val))
                     return True
 
             # Normal transactions
             else:
                 ret, val = site.read(variable_id, transaction_id)
                 if ret == True:
-                    if self.debug: print("Transaction: {}, read from site {} -- {}: {}".format(transaction_id, site.id, variable_id, val))
+                    if self.debug: print("{:7} --- Transaction: {}, read from site {} -- {}: {}".format("Read", transaction_id, site.id, variable_id, val))
                     return True
         return False
 
@@ -158,14 +167,14 @@ class TransactionManager:
         if all_can_write == False:
             return False
 
-        if self.debug: print("Transaction: {}, writes {}: {} in sites: {}".format(transaction_id, variable_id, val, write_sites))
+        if self.debug: print("{:7} --- Transaction: {}, writes {}: {} in sites: {}".format("Write", transaction_id, variable_id, val, write_sites))
         return True    
 
     def dump(self) -> None:
         """
         Dump all data managers
         """
-        print()
+        print("\nDUMP\n")
         for site in self.sites:
             site : DataManager
             site.dump()
@@ -252,16 +261,6 @@ class TransactionManager:
                 if has_cycle: return True
             return False
 
-        def dfs(cur,root,visited,graph):
-            visited.add(cur)
-            for neighbour in graph[cur]:
-                if neighbour == root:
-                    return True
-                if neighbour not in visited:
-                    if dfs(neighbour,root,visited,graph):
-                        return True
-            return False
-
         # Generate the wait-for graph for the Data Manager 
         def generate_graph(site : DataManager) -> None:
             # Iterate all of the variables on the Data Manager
@@ -308,32 +307,21 @@ class TransactionManager:
                 continue
             generate_graph(site)
 
-        # site : DataManager = self.sites[1]
-        # for var in site.variables.values():
-        #     var : Variable
-        #     print(var.lock)
         # Step 2: Deadlock detection using dfs
-        
         aborted_transaction_id = None
         aborted_transaction_timestamp = float('-inf')
-        #print("graph:{}, {}".format(graph, aborted_transaction_timestamp))
         for node in list(graph.keys()):
-            #print(node)
-            #if dfs(node,node,set(),graph):
             if cycle(node, set()):
-                #print(self.transactions)
-
                 aborted_transaction : Transaction = self.transactions[node]
-                #print(aborted_transaction.id, aborted_transaction.timestamp)
+  
                 # finding the youngest transaction to abort
                 if aborted_transaction.timestamp > aborted_transaction_timestamp:
                     aborted_transaction_id = node
                     aborted_transaction_timestamp = aborted_transaction.timestamp
-        #print("graph after: {}, {}".format(graph, aborted_transaction_timestamp))
+  
         # Step 3: Generating outputs
         if aborted_transaction_id != None:
             print("Deadlock! Transaction {} aborted".format(aborted_transaction_id))
             self.__abort(aborted_transaction_id)
             return True
         return False
-
