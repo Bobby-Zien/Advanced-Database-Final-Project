@@ -91,7 +91,7 @@ class Variable:
             elif self.lock == LOCK.READ:
                 for lck in list(self.lock_waiting_queue):
                     lock_type, trans_id = lck
-                    if lock_type == LOCK.WRITE and len(self.read_lock_list) == 1:
+                    if lock_type == LOCK.WRITE and len(self.read_lock_list) == 1 and trans_id in self.read_lock_list:
                         self.promote_lock(trans_id)
                         self.lock_waiting_queue.remove(lck)
                         break
@@ -155,14 +155,14 @@ class DataManager:
             bool: True means can, False means no
         """
         if var_id not in self.variables:
-            return True
+            return False
         var : Variable = self.variables[var_id]
         if var.lock == LOCK.NONE:
             var.lock = LOCK.WRITE
             var.lock_by_trans_id = trans_id
             return True
         elif var.lock == LOCK.READ:
-            if var.need_wait_to_write:
+            if var.need_wait_to_write(trans_id):
                 var.lock_waiting_queue.append((LOCK.WRITE, trans_id))
                 return False
             var.promote_lock(trans_id)
@@ -172,7 +172,8 @@ class DataManager:
                 return True
             var.lock_waiting_queue.append((LOCK.WRITE, trans_id))
             return False
-        
+        return False
+
     def local_write(self, variable_id: str, val: int, transaction_id: str) -> bool:
         if variable_id in self.variables:
             self.variables[variable_id].current_val = val

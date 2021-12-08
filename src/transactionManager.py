@@ -106,7 +106,7 @@ class TransactionManager:
         self.timestamp += 1
         
         self.__udpate_command_queue()
-        while self.__deadlock_detection():
+        if self.__deadlock_detection():
             self.__udpate_command_queue()
 
     def begin(self, transaction_id: str) -> None:
@@ -251,13 +251,15 @@ class TransactionManager:
                                     # graph[T1] = set(T2), means that T1 -> T2
 
         # Using dfs to detect if there's any cycle in the transaction graph
-        def cycle(root, visited : set) -> bool:
+        def cycle(root, visited : set, g : defaultdict(set)) -> bool:
             if root in visited:
                 return True
+            if root not in g:
+                return False
             visited.add(root)
             has_cycle = False
-            for neighbor in graph[root]:
-                has_cycle = cycle(neighbor, visited)
+            for neighbor in g[root]:
+                has_cycle = cycle(neighbor, visited, g)
                 if has_cycle: return True
             return False
 
@@ -311,14 +313,15 @@ class TransactionManager:
         aborted_transaction_id = None
         aborted_transaction_timestamp = float('-inf')
         for node in list(graph.keys()):
-            if cycle(node, set()):
+            if cycle(node, visited=set(), g=graph):
                 aborted_transaction : Transaction = self.transactions[node]
   
                 # finding the youngest transaction to abort
                 if aborted_transaction.timestamp > aborted_transaction_timestamp:
                     aborted_transaction_id = node
                     aborted_transaction_timestamp = aborted_transaction.timestamp
-  
+
+        print("graph after: {}, {}".format(graph, aborted_transaction_id))
         # Step 3: Generating outputs
         if aborted_transaction_id != None:
             print("Deadlock! Transaction {} aborted".format(aborted_transaction_id))
