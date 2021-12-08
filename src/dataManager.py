@@ -91,7 +91,7 @@ class Variable:
             elif self.lock == LOCK.READ:
                 for lck in list(self.lock_waiting_queue):
                     lock_type, trans_id = lck
-                    if lock_type == LOCK.WRITE and len(self.read_lock_list) == 1:
+                    if lock_type == LOCK.WRITE and len(self.read_lock_list) == 1 and trans_id in self.read_lock_list:
                         self.promote_lock(trans_id)
                         self.lock_waiting_queue.remove(lck)
                         break
@@ -158,27 +158,39 @@ class DataManager:
             return False
         var : Variable = self.variables[var_id]
         if var.lock == LOCK.NONE:
-            var.lock = LOCK.WRITE
-            var.lock_by_trans_id = trans_id
             return True
         elif var.lock == LOCK.READ:
             if var.need_wait_to_write(trans_id):
-                var.lock_waiting_queue.append((LOCK.WRITE, trans_id))
                 return False
-            var.promote_lock(trans_id)
             return True
-        else:
+        elif var.lock == LOCK.WRITE:
             if var.lock_by_trans_id == trans_id:
-                return True
+                return True 
             return False
-        
         return False
         
     def local_write(self, variable_id: str, val: int, transaction_id: str) -> bool:
         if variable_id in self.variables:
-            self.variables[variable_id].current_val = val
-            v : Variable = self.variables[variable_id]
-            self.visiting_variables[transaction_id].add(v) 
+            var : Variable = self.variables[variable_id]
+            var.current_val = val
+            self.visiting_variables[transaction_id].add(var)
+            if var.lock == LOCK.NONE:
+                var.lock = LOCK.WRITE
+                var.lock_by_trans_id = transaction_id
+            elif var.lock == LOCK.READ:
+                if var.need_wait_to_write(transaction_id):
+                    var.lock_waiting_queue.append((LOCK.WRITE, transaction_id))
+                else:
+                    var.promote_lock(transaction_id)
+            elif var.lock == LOCK.WRITE:
+                if var.lock_by_trans_id != transaction_id:
+                    var.lock_waiting_queue.append((LOCK.WRITE, transaction_id)) 
+
+            # self.variables[variable_id].current_val = val
+            # v : Variable = self.variables[variable_id]
+            # self.visiting_variables[transaction_id].add(v) 
+            # v.lock_by_trans_id = transaction_id
+            # v.lock = LOCK.WRITE
             return True
         return False
     
@@ -242,6 +254,22 @@ class DataManager:
                 error = True
             var.update_lock_waiting_queue()
         if error: print("COMMIT ERROR: transaction {} has remaining locks".format(transaction_id))
+
+    # def commit(self, transaction_id: str, ts: int) -> None:
+    #     error = False
+    #     for var in self.variables.values():
+    #         var : Variable
+    #         if var.lock == LOCK.WRITE and var.lock_by_trans_id == transaction_id:
+    #             var.commited_val[ts] = var.current_val
+    #             var.status = VAR_STATUS.READY
+
+    #         #print(var.id, var.lock)
+    #         var.release_lock(transaction_id)
+    #         var.update_lock_waiting_queue()
+    #         if var.remain_lock(transaction_id):
+    #             error = True
+
+    #     if error: print("COMMIT ERROR: transaction {} has remaining locks".format(transaction_id))
 
     def abort(self, transaction_id: str)-> None:
         """[summary]
