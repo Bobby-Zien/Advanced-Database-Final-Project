@@ -322,7 +322,6 @@ class TransactionManager:
                     aborted_transaction_id = node
                     aborted_transaction_timestamp = aborted_transaction.timestamp
 
-        #print("graph after: {}, {}".format(graph, aborted_transaction_id))
         # Step 3: Generating outputs
         if aborted_transaction_id != None:
             print("Deadlock! Transaction {} aborted".format(aborted_transaction_id))

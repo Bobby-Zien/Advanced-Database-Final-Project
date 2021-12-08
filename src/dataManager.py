@@ -168,8 +168,6 @@ class DataManager:
             return True
         var : Variable = self.variables[var_id]
 
-        #print(self.id, trans_id, var.id, var.lock, var.lock_by_trans_id)
-        
         if var.lock == LOCK.NONE:
             var.lock = LOCK.WRITE
             var.lock_by_trans_id = trans_id
@@ -230,32 +228,6 @@ class DataManager:
             var.lock_waiting_queue.append((LOCK.READ, tid))
         return False, None
 
-    # def commit(self, transaction_id: str, ts: int) -> None:
-    #     """[summary]
-    #     commit the uncommited variable written by this transaction 
-
-    #     Args:
-    #         transaction_id ([str]): transaction_id
-    #         ts (int): timestamp of the transaciton ending(commiting)
-    #     """
-    #     if len(self.visiting_variables[transaction_id]) < 1:
-    #         return
-    #     for var in self.visiting_variables[transaction_id]:
-    #         var : Variable
-    #         var.commited_val[ts] = var.current_val
-    #         var.status = VAR_STATUS.READY
-    #         var.update_lock_waiting_queue()
-    #     del self.visiting_variables[transaction_id]
-
-    #     error = False
-    #     for var in self.variables.values():
-    #         var : Variable
-    #         var.release_lock(transaction_id)
-    #         if var.remain_lock(transaction_id):
-    #             error = True
-    #         var.update_lock_waiting_queue()
-    #     if error: print("COMMIT ERROR: transaction {} has remaining locks".format(transaction_id))
-
     def commit(self, transaction_id: str, ts: int) -> None:
         error = False
         for var in self.variables.values():
@@ -264,7 +236,9 @@ class DataManager:
                 var.commited_val[ts] = var.current_val
                 var.status = VAR_STATUS.READY
 
-            #print(var.id, var.lock)
+        # Read lock and update lock_waiting_queue
+        for var in self.variables.values():
+            var : Variable
             var.release_lock(transaction_id)
             var.update_lock_waiting_queue()
             if var.remain_lock(transaction_id):
