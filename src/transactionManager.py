@@ -162,8 +162,7 @@ class TransactionManager:
                     ret = site.local_write(variable_id, val, transaction_id)
                     if ret: write_sites.append(site.id)
                 else:
-                    #print(site.id, transaction_id, variable_id, "False")
-                    return False
+                    all_can_write = False
 
         if all_can_write == False:
             return False
@@ -252,7 +251,7 @@ class TransactionManager:
                                     # graph[T1] = set(T2), means that T1 -> T2
 
         # Using dfs to detect if there's any cycle in the transaction graph
-        def cycle(root, visited : set, g: defaultdict(set)) -> bool:
+        def cycle(root, visited : set, g : defaultdict(set)) -> bool:
             if root in visited:
                 return True
             if root not in g:
