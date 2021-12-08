@@ -83,7 +83,8 @@ class Variable:
         elif self.lock == LOCK.READ and tid in self.read_lock_list:
             self.read_lock_list.remove(tid)
             if len(self.read_lock_list) <1:
-                self.lock = LOCK.NONE  
+                self.lock = LOCK.NONE
+                self.lock_by_trans_id = None  
 
     def add_lock_waiting_queue(self, lock : LOCK, trans_id: str) -> None:
         for type, tid in list(self.lock_waiting_queue):
@@ -95,7 +96,6 @@ class Variable:
     def update_lock_waiting_queue(self) -> None:
         if self.lock_waiting_queue:
             if self.lock == LOCK.NONE:
-
                 self.lock, self.lock_by_trans_id = self.lock_waiting_queue.popleft()
                 #print("update: {}, {}".format(self.lock, self.lock_by_trans_id))
             elif self.lock == LOCK.READ:
@@ -105,8 +105,9 @@ class Variable:
                         self.promote_lock(trans_id)
                         self.lock_waiting_queue.remove(lck)
                         break
-                    self.read_lock_list.add(trans_id)
-                    self.lock_waiting_queue.remove(lck)
+                    if not self.need_wait_to_write(trans_id):
+                        self.read_lock_list.add(trans_id)
+                        self.lock_waiting_queue.remove(lck)
     
     def remain_lock(self, tid: str):
         for _, l in self.lock_waiting_queue:
@@ -167,14 +168,13 @@ class DataManager:
         if var_id not in self.variables:
             return True
         var : Variable = self.variables[var_id]
-
         if var.lock == LOCK.NONE:
             var.lock = LOCK.WRITE
             var.lock_by_trans_id = trans_id
             return True
         elif var.lock == LOCK.READ:
             if var.need_wait_to_write(trans_id):
-                var.lock_waiting_queue.append((LOCK.WRITE, trans_id))
+                var.add_lock_waiting_queue(LOCK.WRITE, trans_id)
                 return False
             var.promote_lock(trans_id)
             return True
@@ -218,14 +218,14 @@ class DataManager:
                 if tid in var.read_lock_list:
                     return True, var.commited_val[next(reversed(var.commited_val))]
                 if var.has_write_waiting():
-                    var.lock_waiting_queue.append((LOCK.READ, tid))
+                    var.add_lock_waiting_queue(LOCK.READ, tid)
                     return False, None
                 else:
                     var.read_lock_list.add(tid)
                     return True, var.commited_val[next(reversed(var.commited_val))]
             elif var.lock_by_trans_id == tid:
                 return True, var.commited_val[next(reversed(var.commited_val))]
-            var.lock_waiting_queue.append((LOCK.READ, tid))
+            var.add_lock_waiting_queue(LOCK.READ, tid)
         return False, None
 
     def commit(self, transaction_id: str, ts: int) -> None:
@@ -235,16 +235,16 @@ class DataManager:
             if var.lock == LOCK.WRITE and var.lock_by_trans_id == transaction_id:
                 var.commited_val[ts] = var.current_val
                 var.status = VAR_STATUS.READY
-
-        # Read lock and update lock_waiting_queue
-        for var in self.variables.values():
-            var : Variable
             var.release_lock(transaction_id)
-            var.update_lock_waiting_queue()
             if var.remain_lock(transaction_id):
                 error = True
+                break
+            var.update_lock_waiting_queue()
 
-        if error: print("COMMIT ERROR: transaction {} has remaining locks".format(transaction_id))
+        if error: 
+            print("COMMIT ERROR: transaction {} has remaining locks".format(transaction_id))
+            return False
+        return True
 
     def abort(self, transaction_id: str)-> None:
         """[summary]
@@ -260,6 +260,7 @@ class DataManager:
                 if l[1] == transaction_id:
                     var.lock_waiting_queue.remove(l)
             var.update_lock_waiting_queue()
+        return True
 
     def fail(self) -> None:
         for variable in self.variables.values():

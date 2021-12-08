@@ -66,7 +66,6 @@ class TransactionManager:
             if cmd.type == COMMAND_TYPE.READ:
                 flag = self.read(cmd.transaction_id, cmd.variable_id)
             elif cmd.type == COMMAND_TYPE.WRITE:
-                
                 flag = self.write(cmd.transaction_id, cmd.variable_id, cmd.val)
             if flag:
                 # remove executed commands
@@ -163,10 +162,7 @@ class TransactionManager:
                     ret = site.local_write(variable_id, val, transaction_id)
                     if ret: write_sites.append(site.id)
                 else:
-                    all_can_write = False
-
-        if all_can_write == False:
-            return False
+                    return False
 
         if self.debug: print("{:7} --- Transaction: {}, writes {}: {} in sites: {}".format("Write", transaction_id, variable_id, val, write_sites))
         return True    
@@ -235,7 +231,7 @@ class TransactionManager:
         ts.status = TRAN_STATUS.ABORTED
         self.transactions.pop(transaction_id)
         if self.debug: print("Aborted transaction :{}".format(transaction_id))
-
+        
     def __commit(self, transaction_id: str) -> None:
         """
         Called by self.end()
@@ -246,23 +242,23 @@ class TransactionManager:
             site.commit(transaction_id, self.timestamp)
         self.transactions.pop(transaction_id)
         if self.debug: print("Commited transaction: {}".format(transaction_id))
-
+        
     def __deadlock_detection(self) -> bool:
         graph = defaultdict(set)    # Using adjacency list to represent the waits-for graph
                                     # graph[T1] = set(T2), means that T1 -> T2
 
-        # Using dfs to detect if there's any cycle in the transaction graph
-        def cycle(root, visited : set, g : defaultdict(set)) -> bool:
-            if root in visited:
+        def lock_check(lock, q_lk, v):
+            # (waiting_lock_type, waiting_transaction)
+            if lock == LOCK.READ:
+                if q_lk[0] == LOCK.READ or (len(v.read_lock_list) == 1 and q_lk[1] in v.read_lock_list):
+                    return False
                 return True
-            if root not in g:
-                return False
-            visited.add(root)
-            has_cycle = False
-            for neighbor in g[root]:
-                has_cycle = cycle(neighbor, visited, g)
-                if has_cycle: return True
-            return False
+            return v.lock_by_trans_id != q_lk[1]
+        
+        def q_check(lk1,lk2):
+            if lk1[0] == LOCK.READ and lk2[0] == LOCK.READ:
+                 return False
+            return not lk1[1] == lk2[1]
 
         # Generate the wait-for graph for the Data Manager 
         def generate_graph(site : DataManager) -> None:
@@ -274,47 +270,48 @@ class TransactionManager:
 
                 curr_lock = var.lock
                 # Iterate through the variable's lock_waiting_queue
-                for (waiting_lock_type, waiting_transaction) in list(var.lock_waiting_queue):
-                    if curr_lock == LOCK.READ:
-                        if waiting_lock_type == LOCK.READ or len(var.read_lock_list) == 1 or waiting_transaction in var.read_lock_list:
-                            continue
-                        # otherwise, we need to add all of the transactions in the share list to graph[waiting_transaction]
-                        for tid in var.read_lock_list:
-                            if tid != waiting_transaction:
-                                graph[waiting_transaction].add(tid)
-
-                    elif curr_lock == LOCK.WRITE:
-                        if var.lock_by_trans_id == waiting_transaction:
-                            continue
-
-                        graph[waiting_transaction].add(var.lock_by_trans_id)
+                for lk in list(var.lock_waiting_queue):
+                    if lock_check(curr_lock,lk,var):
+                        if curr_lock == LOCK.READ:
+                            for tid in var.read_lock_list:
+                                if tid != lk[1]:
+                                    graph[lk[1]].add(tid)
+                                    # print(lk[11],tid)
+                        else:
+                            if var.lock_by_trans_id == lk[1]:
+                                continue
+                            graph[lk[1]].add(var.lock_by_trans_id)
+                            # print(lk[1],var.lock_by_trans_id)
 
                 # T’ is ahead of T on the wait queue for x and T’ seeks a conflicting lock on x.
                 for j in range(len(var.lock_waiting_queue)):
                     for i in range(j):
-                        lock_type_i, waiting_transaction_i = var.lock_waiting_queue[i]
-                        lock_type_j, waiting_transaction_j = var.lock_waiting_queue[j]
+                        if q_check(var.lock_waiting_queue[i],var.lock_waiting_queue[j]):
+                            graph[var.lock_waiting_queue[j][1]].add(var.lock_waiting_queue[i][1])
 
-                        if lock_type_i == LOCK.READ and lock_type_j == LOCK.READ:
-                            continue
-
-                        if waiting_transaction_i == waiting_transaction_j:
-                            continue
-
-                        graph[waiting_transaction_j].add(waiting_transaction_i)
-
+        # Using dfs to detect if there's any cycle in the transaction graph
+        def cycle(n, root, visited : set, g : defaultdict(set)) -> bool:
+            visited.add(n)
+            for neighbor in g[n]:
+                if neighbor == root:
+                    return True
+                if neighbor not in visited:
+                    if cycle(neighbor,root,visited,g):
+                        return True
+            return False
+        
         # Step 1: Generate the waits-for graph for all working Data manager
         for site in self.sites:
             site : DataManager
             if site.on_flag == False:
                 continue
             generate_graph(site)
-
+        
         # Step 2: Deadlock detection using dfs
         aborted_transaction_id = None
         aborted_transaction_timestamp = float('-inf')
         for node in list(graph.keys()):
-            if cycle(node, visited=set(), g=graph):
+            if cycle(node,node, visited=set(), g=graph):
                 aborted_transaction : Transaction = self.transactions[node]
   
                 # finding the youngest transaction to abort
